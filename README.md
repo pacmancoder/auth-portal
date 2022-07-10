@@ -54,7 +54,6 @@ Let's see how we can do it with `nginx's` *auth_request* API and `docker-compose
 
         # Required to make POST/PUT/etc. requests with body work
         location = /auth-portal/auth/wiki/ {
-            internal;
             resolver 127.0.0.11;
             proxy_pass http://auth-portal:8080;
             proxy_pass_request_body off;
