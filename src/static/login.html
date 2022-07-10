@@ -1,0 +1,208 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Wiki library</title>
+    <meta name="description" content="Wiki library">
+    <meta name="author" content="pacmancoder">
+    <link rel="stylesheet" href="{{AP_PREFIX}}static/pico.min.css">
+    <style>
+        .card-green {
+            background-color: rgb(222, 255, 219);
+        }
+
+        .card-red {
+            background-color: rgb(255, 226, 223);
+        }
+
+    </style>
+    <script>
+        const AP_PREFIX = "{{AP_PREFIX}}";
+        const AP_SERVICE = "{{AP_SERVICE}}";
+
+        function onkeypress_is_number(evt) {
+            evt = (evt) ? evt : window.event;
+            var charCode = (evt.which) ? evt.which : evt.keyCode;
+            if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+                return false;
+            }
+            return true;
+        }
+
+        function ap_endpoint(path) {
+            return AP_PREFIX + path + "/" + AP_SERVICE
+        }
+
+        function hide_cards() {
+            const cards = document.querySelectorAll('[id^="ap-card-"]');
+            for (const card of cards) {
+                card.hidden = true;
+            }
+        }
+
+        function show_card(card) {
+            hide_cards();
+            document.getElementById("ap-card-" + card).hidden = false;
+        }
+
+        function show_login_form() {
+            document.getElementById("ap-login-form").hidden = false;
+        }
+
+        function hide_login_form() {
+            document.getElementById("ap-login-form").hidden = true;
+        }
+
+        function to_logout_mode() {
+            hide_login_form();
+            show_card("auth-successful");
+            document.getElementById("ap-logout-button").hidden = false;
+        }
+
+        function to_login_mode() {
+            show_login_form();
+            hide_cards();
+            document.getElementById("ap-logout-button").hidden = true;
+        }
+
+        async function logout() {
+            let response = await fetch(ap_endpoint("logout"), { method: "POST" });
+            if (response.status == 200) {
+                to_login_mode();
+                show_card("logout-successful");
+            } else {
+                show_card("logout-failed");
+            }
+        }
+
+        async function login() {
+            let data = {
+                "l": document.getElementById("ap-login").value,
+                "p": document.getElementById("ap-password").value,
+                "k": document.getElementById("ap-totp").value.toString().padStart(6, '0'),
+            };
+
+            let response = await fetch(
+                ap_endpoint("login"),
+                {
+                    method: "POST",
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                },
+            );
+
+            if (response.status == 200) {
+                to_logout_mode();
+            } else if (response.status == 401) {
+                show_card("auth-failed");
+            } else if (response.status == 400 || response.status == 403) {
+                show_card("bad-request");
+            } else if (response.status == 500) {
+                show_card("server-error");
+            }
+        }
+
+        async function is_authenticated() {
+            let response = await fetch(ap_endpoint("auth"), { method: "GET" });
+            switch (response.status) {
+                case 200:
+                    return true;
+                case 401:
+                    return false;
+                default:
+                    show_card("auth-check-failed");
+                    return false;
+            }
+        }
+
+        async function init() {
+            if (await is_authenticated()) {
+                to_logout_mode();
+            } else {
+                to_login_mode();
+            }
+        }
+
+
+        window.onload = function () {
+            init()
+        }
+    </script>
+</head>
+
+<body>
+    <main class="container">
+        <nav>
+            <ul>
+                <li><strong>🔑 Auth portal - {{AP_SERVICE}}</strong></li>
+            </ul>
+            <ul>
+                <li><a href="javascript:return false;" onclick="logout()" id="ap-logout-button" hidden>Logout</a></li>
+            </ul>
+        </nav>
+
+        <form id="ap-login-form" hidden>
+            <label for="ap-login">
+                Login
+                <input type="text" id="ap-login" name="ap-login" placeholder="Login" required>
+            </label>
+            <label for="ap-password">
+                Password
+                <input type="password" id="ap-password" name="ap-password" placeholder="Password" required>
+            </label>
+            <label for="ap-totp" id="ap-totop-control">
+                TOTP key
+                <input type="text" id="ap-totp" name="ap-totp" placeholder="TOTP key" maxlength="6"
+                    onkeypress="return onkeypress_is_number(event)">
+            </label>
+            <button type="button" onclick="login()">Sign in</button>
+        </form>
+        <article id="ap-card-auth-successful" class="card-green" hidden>
+            <h2>✅ Authorization success</h2>
+            Go back to your protected <kbd>{{AP_SERVICE}}</kbd> service
+        </article>
+        <article id="ap-card-logout-successful" class="card-green" hidden>
+            <h2>✅ Logout success</h2>
+            You are logged out now
+        </article>
+        <article id="ap-card-bad-request" class="card-red" hidden>
+            <h2>⚠️ Bad request</h2>
+            Sent request is invalid
+        </article>
+        <article id="ap-card-server-error" class="card-red" hidden>
+            <h2>⚠️ Server error</h2>
+            Internal server error has happened
+        </article>
+        <article id="ap-card-auth-failed" class="card-red" hidden>
+            <h2>⚠️ Auth failed</h2>
+            Possible causes:
+            <p>
+            <ul>
+                <li>Invalid credentials for service <kbd>{{AP_SERVICE}}</kbd></li>
+                <li>TOTP code has expired</li>
+            </ul>
+            </p>
+        </article>
+        <article id="ap-card-auth-check-failed" class="card-red" hidden>
+            <h2>⚠️ Failed to check auth</h2>
+            Please check that your reverse proxy configured correctly
+        </article>
+        <article id="ap-card-logout-failed" class="card-red" hidden>
+            <h2>⚠️ Logout failed</h2>
+            Possible causes:
+            <p>
+            <ul>
+                <li>Server is dead</li>
+                <li>Server configured incorrectly</li>
+                <li>Page code was changed</li>
+            </ul>
+            </p>
+        </article>
+    </main>
+</body>
+
+</html>
